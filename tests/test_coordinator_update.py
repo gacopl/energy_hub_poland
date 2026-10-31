@@ -228,6 +228,7 @@ class TestCache:
     async def test_load_cache_restores_data(self):
         """_load_cache correctly deserializes cached data."""
         cached_data = {
+            "price_cache_revision": 1,
             "today": {"0": 0.30, "1": 0.32},
             "today_date": "2025-01-15",
             "tomorrow": {"0": 0.28},
@@ -425,3 +426,115 @@ class TestFetchData:
             result = await coord._fetch_data(TODAY)
 
         assert result is None
+
+
+class TestTomorrowPricesPublication:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("price", ["0", "-100", "400"])
+    async def test_retries_until_tomorrow_prices_are_complete(self, price):
+        """Missing and partial data must not block publication after 14:00."""
+        from custom_components.energy_hub_poland.api import EnergyHubApiClient
+
+        coord = _make_coordinator(today=PRICES_TODAY, today_date=TODAY)
+        response = AsyncMock()
+        response.raise_for_status = MagicMock()
+        session = AsyncMock()
+        session.get.return_value = response
+        coord.api_client = EnergyHubApiClient(session)
+
+        def payload(hours):
+            # PGE is queried for the trading date (delivery date minus one).
+            return [
+                {
+                    "date_time": f"{TODAY} {hour:02d}:00:00",
+                    "attributes": [{"name": "price", "value": price}],
+                }
+                for hour in hours
+            ]
+
+        # Both today's and tomorrow's PGE fallback are requested per refresh.
+        response.json.side_effect = [
+            [],
+            [],
+            [],
+            payload(range(12)),
+            [],
+            [],
+            [],
+            payload(range(24)),
+        ]
+        with _patch_now(NOW), _patch_utcnow(NOW_UTC):
+            result = await coord._async_update_data()
+        assert result["today"] == PRICES_TODAY
+        assert result["tomorrow"] is None
+        coord.hass.bus.async_fire.assert_not_called()
+
+        later = NOW.replace(hour=14, minute=5)
+        with _patch_now(later), _patch_utcnow(later.astimezone(UTC)):
+            result = await coord._async_update_data()
+        expected_price = float(price) / 1000
+        assert result["tomorrow"] == dict.fromkeys(range(12), expected_price)
+
+        # A temporary absence must preserve already fetched partial data.
+        later = NOW.replace(hour=14, minute=10)
+        with _patch_now(later), _patch_utcnow(later.astimezone(UTC)):
+            result = await coord._async_update_data()
+        assert result["tomorrow"] == dict.fromkeys(range(12), expected_price)
+
+        later = NOW.replace(hour=14, minute=15)
+        with _patch_now(later), _patch_utcnow(later.astimezone(UTC)):
+            result = await coord._async_update_data()
+        assert result["tomorrow"] == dict.fromkeys(range(24), expected_price)
+        assert coord._internal_data["tomorrow_date"] == TOMORROW
+        assert session.get.await_count == 8
+
+        # A complete day, including a day of zero prices, needs no more requests.
+        later = NOW.replace(hour=14, minute=20)
+        with _patch_now(later), _patch_utcnow(later.astimezone(UTC)):
+            await coord._async_update_data()
+        assert session.get.await_count == 8
+
+    @pytest.mark.asyncio
+    async def test_pse_prices_take_priority_over_pge_fallback(self):
+        coord = _make_coordinator(today=PRICES_TODAY, today_date=TODAY)
+        coord.pse_client.get_rce_prices.return_value = [
+            {"dtime": f"{TOMORROW} 01:00:00", "rce_pln": 0},
+            {"dtime": f"{TOMORROW} 02:00:00", "rce_pln": -100},
+        ]
+        coord._fetch_pge_prices = AsyncMock(return_value=PRICES_TOMORROW)
+
+        with _patch_now(NOW), _patch_utcnow(NOW_UTC):
+            result = await coord._async_update_data()
+
+        assert result["tomorrow"] == {**PRICES_TOMORROW, 0: 0.0, 1: -0.1}
+        coord.hass.bus.async_fire.assert_called_once()
+
+
+class TestLegacyPriceCache:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('revision', [None, 1])
+    @pytest.mark.parametrize('today_zero', [False, True])
+    async def test_cache_migration_preserves_costs_and_trusted_zero_prices(self, revision, today_zero):
+        coord = _make_coordinator(cache_loaded=False)
+        prices = dict.fromkeys(range(24), 0.0)
+        cached = {
+            'today': prices if today_zero else PRICES_TODAY,
+            'today_date': TODAY.isoformat(),
+            'tomorrow': prices,
+            'tomorrow_date': TOMORROW.isoformat(),
+            'costs': {'dynamic': 651.37, 'g12w': 500.13},
+            'cost_breakdown': {'g12w': {'total': 500.13}},
+            'last_reset': NOW.isoformat(),
+        }
+        if revision is not None:
+            cached['price_cache_revision'] = revision
+        coord.store.async_load.return_value = cached
+        with _patch_now(NOW), _patch_utcnow(NOW_UTC):
+            await coord._load_cache()
+        assert coord.costs['dynamic'] == 651.37
+        assert coord.costs['g12w'] == 500.13
+        assert coord.cost_breakdown['g12w']['total'] == 500.13
+        assert coord._internal_data['tomorrow'] == (prices if revision else None)
+        assert coord._internal_data['today'] == (None if today_zero and not revision else cached['today'])
+        await coord._save_cache()
+        assert coord.store.async_save.call_args.args[0]['price_cache_revision'] == 1
