@@ -44,6 +44,8 @@
           "price_peak": "Peak price (PLN/kWh)",
           "price_offpeak": "Off-peak price (PLN/kWh)",
           "network_variable_fee": "Variable network fee (PLN/kWh)",
+          "network_variable_fee_g12w_peak": "Peak network fee (PLN/kWh)",
+          "network_variable_fee_g12w_offpeak": "Off-peak network fee (PLN/kWh)",
           "hours_peak_summer": "Peak hours - SUMMER (e.g., 6-13,15-22)",
           "hours_peak_winter": "Peak hours - WINTER (e.g., 6-13,15-22)"
         }
@@ -152,6 +154,8 @@
           "g12_settings_hours_peak_winter": "G12 - Peak hours WINTER",
           "g12w_settings_price_peak": "G12w - Peak price",
           "g12w_settings_price_offpeak": "G12w - Off-peak price",
+          "g12w_settings_network_variable_fee_peak": "G12w - Peak network fee",
+          "g12w_settings_network_variable_fee_offpeak": "G12w - Off-peak network fee",
           "g12w_settings_network_variable_fee": "G12w - Variable network fee",
           "g12w_settings_hours_peak_summer": "G12w - Peak hours SUMMER",
           "g12w_settings_hours_peak_winter": "G12w - Peak hours WINTER",
