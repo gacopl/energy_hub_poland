@@ -97,6 +97,8 @@ def test_g12w_components_include_net_gross_and_separate_zone_fees():
 
     assert rates["unit"] == "PLN/kWh"
     assert rates["vat_rate"] == 23
+    assert rates["fixed_monthly_net"] == 0.0
+    assert rates["fixed_monthly_gross"] == 0.0
     assert rates["peak"]["energy_net"] == pytest.approx(0.63)
     assert rates["peak"]["distribution_net"] == pytest.approx(0.37)
     assert rates["peak"]["energy_gross"] == pytest.approx(0.63 * 1.23)
@@ -137,3 +139,14 @@ def test_g12w_previous_shared_fee_is_preserved():
     rates = entity.extra_state_attributes["tariff_rates"]
     assert rates["peak"]["distribution_net"] == pytest.approx(0.05)
     assert rates["offpeak"]["distribution_net"] == pytest.approx(0.05)
+
+
+def test_g12w_tariff_attributes_include_monthly_fixed_fee():
+    entity = make_g12w_sensor(
+        {"price_peak": 0.63, "price_offpeak": 0.42}
+    )
+    entity._config["network_fixed_fee"] = 12.5
+    rates = entity.extra_state_attributes["tariff_rates"]
+    assert rates["fixed_monthly_unit"] == "PLN/month"
+    assert rates["fixed_monthly_net"] == pytest.approx(12.5)
+    assert rates["fixed_monthly_gross"] == pytest.approx(12.5 * 1.23)
