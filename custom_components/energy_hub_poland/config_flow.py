@@ -749,10 +749,21 @@ class EnergyHubPolandOptionsFlowHandler(config_entries.OptionsFlow):
                     prefix_with_underscore = f"{prefix}_"
                     settings = {}
                     keys_to_remove = []
+                    # The G12w options form uses user-facing zone names, while
+                    # the calculation engine already expects tariff-scoped keys.
+                    zone_fee_keys = (
+                        {
+                            "network_variable_fee_peak": CONF_NETWORK_VARIABLE_FEE_G12W_PEAK,
+                            "network_variable_fee_offpeak": CONF_NETWORK_VARIABLE_FEE_G12W_OFFPEAK,
+                        }
+                        if prefix == "g12w_settings"
+                        else {}
+                    )
                     for k, v in temp_input.items():
-                        if k.startswith(prefix_with_underscore) and k.replace(
-                            prefix_with_underscore, ""
-                        ) in [
+                        if not k.startswith(prefix_with_underscore):
+                            continue
+                        field = k.removeprefix(prefix_with_underscore)
+                        if field in [
                             CONF_PRICE_PEAK,
                             CONF_PRICE_OFFPEAK,
                             CONF_PRICE_PEAK_1,
@@ -764,8 +775,8 @@ class EnergyHubPolandOptionsFlowHandler(config_entries.OptionsFlow):
                             CONF_HOURS_PEAK_1_WINTER,
                             CONF_HOURS_PEAK_2_WINTER,
                             "network_variable_fee",
-                        ]:
-                            settings[k.replace(prefix_with_underscore, "")] = v
+                        ] or field in zone_fee_keys:
+                            settings[zone_fee_keys.get(field, field)] = v
                             keys_to_remove.append(k)
                     if settings:
                         new_options[settings_key] = settings
@@ -918,6 +929,30 @@ class EnergyHubPolandOptionsFlowHandler(config_entries.OptionsFlow):
                         default=s.get(CONF_NETWORK_VARIABLE_FEE, 0.0),
                     )
                 ] = vol.Coerce(float)
+                schema[
+                    vol.Optional(
+                        "g12w_settings_network_variable_fee_peak",
+                        default=s.get(
+                            CONF_NETWORK_VARIABLE_FEE_G12W_PEAK,
+                            s.get(
+                                CONF_NETWORK_VARIABLE_FEE,
+                                config.get(CONF_NETWORK_VARIABLE_FEE, 0.0),
+                            ),
+                        ),
+                    )
+                ] = vol.All(vol.Coerce(float), vol.Range(min=0))
+                schema[
+                    vol.Optional(
+                        "g12w_settings_network_variable_fee_offpeak",
+                        default=s.get(
+                            CONF_NETWORK_VARIABLE_FEE_G12W_OFFPEAK,
+                            s.get(
+                                CONF_NETWORK_VARIABLE_FEE,
+                                config.get(CONF_NETWORK_VARIABLE_FEE, 0.0),
+                            ),
+                        ),
+                    )
+                ] = vol.All(vol.Coerce(float), vol.Range(min=0))
                 schema[
                     vol.Required(
                         "g12w_settings_hours_peak_summer",
