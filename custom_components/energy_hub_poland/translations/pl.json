@@ -44,6 +44,8 @@
           "price_peak": "Cena w szczycie (PLN/kWh)",
           "price_offpeak": "Cena poza szczytem (PLN/kWh)",
           "network_variable_fee": "Opłata zmienna sieciowa (PLN/kWh)",
+          "network_variable_fee_g12w_peak": "Opłata sieciowa w szczycie (PLN/kWh)",
+          "network_variable_fee_g12w_offpeak": "Opłata sieciowa poza szczytem (PLN/kWh)",
           "hours_peak_summer": "Godziny szczytu - LATO (np. 6-13,15-22)",
           "hours_peak_winter": "Godziny szczytu - ZIMA (np. 6-13,15-22)"
         }
