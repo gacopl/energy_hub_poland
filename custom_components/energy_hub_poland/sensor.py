@@ -27,6 +27,7 @@ from .const import (
     CONF_G12R_SETTINGS,
     CONF_G12W_SETTINGS,
     CONF_G13_SETTINGS,
+    CONF_NETWORK_FIXED_FEE,
     CONF_NETWORK_VARIABLE_FEE,
     CONF_NETWORK_VARIABLE_FEE_DYNAMIC,
     CONF_NETWORK_VARIABLE_FEE_G12_OFFPEAK,
@@ -840,6 +841,13 @@ class CurrentPriceSensor(EnergyHubSensorEntity):
                     attrs["tariff_rates"] = {
                         "unit": "PLN/kWh",
                         "vat_rate": float(self._config.get(CONF_VAT_RATE, "0")),
+                        "fixed_monthly_unit": "PLN/month",
+                        "fixed_monthly_net": float(
+                            self._config.get(CONF_NETWORK_FIXED_FEE, 0.0)
+                        ),
+                        "fixed_monthly_gross": float(
+                            self._config.get(CONF_NETWORK_FIXED_FEE, 0.0)
+                        ) * (1 + vat_rate),
                         "peak": components(peak_energy, peak),
                         "offpeak": components(offpeak_energy, offpeak),
                     }
