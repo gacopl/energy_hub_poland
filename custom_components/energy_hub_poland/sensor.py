@@ -817,6 +817,33 @@ class CurrentPriceSensor(EnergyHubSensorEntity):
         attrs["network_variable_fee"] = float(variable_fee)
         attrs["vat_rate"] = f"{self._config.get(CONF_VAT_RATE, '0')}%"  # type: ignore[assignment]  # mypy baseline, see #46
 
+        if self._tariff == "g12w":
+            # Expose both tariff components for net-billing consumers without
+            # altering the price sensor entity ID, native value or history.
+            settings = self._config.get(CONF_G12W_SETTINGS, {})
+            peak_energy = settings.get("price_peak")
+            offpeak_energy = settings.get("price_offpeak")
+            if peak_energy is not None and offpeak_energy is not None:
+                peak = self._calculate_total_price(peak_energy, "g12w")
+                offpeak = self._calculate_total_price(offpeak_energy, "g12w")
+                if peak is not None and offpeak is not None:
+                    def components(energy, price):
+                        return {
+                            "energy_net": float(energy),
+                            "distribution_net": price["variable_fee"],
+                            "energy_gross": float(energy) * (1 + vat_rate),
+                            "distribution_gross": price["variable_fee"] * (1 + vat_rate),
+                            "total_gross": price["total"],
+                        }
+
+                    vat_rate = float(self._config.get(CONF_VAT_RATE, "0")) / 100
+                    attrs["tariff_rates"] = {
+                        "unit": "PLN/kWh",
+                        "vat_rate": float(self._config.get(CONF_VAT_RATE, "0")),
+                        "peak": components(peak_energy, peak),
+                        "offpeak": components(offpeak_energy, offpeak),
+                    }
+
         if self._tariff == "dynamic":
             if not self.coordinator.data:
                 attrs.update({"today_prices": {}, "tomorrow_prices": {}})  # type: ignore[dict-item]  # mypy baseline, see #46
